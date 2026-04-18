@@ -27,37 +27,39 @@ class LinearProjection(nn.Module):
         self.class_token = nn.Parameter(torch.zeros(1, 1, self.latent_size), requires_grad=True)
         self.positional_encoding = PositionalEncoding(self.latent_size)
 
-    def forward(self, sign_batch):
+    def forward(self, sign_batch, masks):
         sign_batch = self.linear_projection(sign_batch)
         class_token = self.class_token.expand(sign_batch.shape[0], -1, -1)
-        sign_batch = torch.cat((sign_batch, class_token), dim=1)
-        sign_batch = self.positional_encoding.forward(sign_batch)
-        return sign_batch
+        sign_batch = torch.cat((class_token, sign_batch), dim=1)
+        class_token_mask = torch.zeros(sign_batch.shape[0], 1)
+        masks = torch.cat((masks, class_token_mask), dim=1)
+        sign_batch = self.positional_encoding(sign_batch)
+        return sign_batch, masks
 
-
-class TransformerEncoder(nn.Module):
-    def __init__(self, d_model, n_heads):
+class VitModel(nn.Module):
+    def __init__(self, d_model, input_dim,  n_heads, num_blocks):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
-        self.layer = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.n_heads,)
-        self.linear_projection = LinearProjection(self.d_model, self.d_model)
-        self.transformer = nn.TransformerEncoder(self.layer, self.n_heads)
+        self.input_dim = input_dim
+        self.num_blocks = num_blocks
+        self.encoder = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.n_heads)
+        self.linear_projection = LinearProjection(self.input_dim, self.d_model)
+        self.transformer = nn.TransformerEncoder(self.encoder, self.num_blocks)
 
-    def forward(self, x):
-        x = self.linear_projection(x)
-        mask = [True] * 20
-        mask_tensor = torch.tensor(mask)
-        x = self.transformer.forward(x, src_key_padding_mask=mask_tensor)
-        y = x
+    def forward(self,x, masks):
+        x, masks = self.linear_projection(x, masks)
+        x = self.transformer.forward(x, src_key_padding_mask=masks)
         return x
 
 if __name__ == '__main__':
-    x = torch.randn(20, 50,512)
-    mask = [True] * 20
-    transformer = TransformerEncoder(512, 8)
-    x = transformer.forward(x)
-    print(x.shape)
+    example_x = torch.randn(512, 50,512)
+    n_heads, n_layers = 4, 4
+    encoder = VitModel(512, 512, 8, 4)
+    example_mask = [[False]*500 + [True]*12]*50
+    example_mask = torch.tensor(example_mask)
+    example_y = encoder(example_x, example_mask)
+    print(example_y.shape)
 
 
 #class VitTransformerEncoder(nn.Module):

@@ -15,7 +15,7 @@ class DataLoading:
         features = [items.reshape(items.shape[:-2] + (-1,)) for items in features]
         max_frame_length = max(frame.shape[0] for frame in features)
         frame_padded = [np.pad(items, ((0, max_frame_length - items.shape[0]), (0, 0)), mode='constant') for items in features]
-        masks = [[True]*items.shape[0] + [False]*(max_frame_length - items.shape[0]) for items in features]
+        masks = [[False]*items.shape[0] + [True]*(max_frame_length - items.shape[0]) for items in features]
         labels = [label for _, label in self.dataset]
         tensor_frame = torch.Tensor(frame_padded)
         tensor_label = torch.Tensor(labels)
@@ -36,5 +36,19 @@ class DataLoading:
         dataloader = DataLoader(data, batch_size=self.batch_size, shuffle=True)
         return dataloader
 
-
+if __name__ == '__main__':
+    dataset = LSFBIsolLandmarks(LSFBIsolConfig(
+     root="C:/Users/abassoma/Documents/Dataset/GSL",
+     split="mini_sample",
+     n_labels=100,
+     sequence_max_length=50
+    ))
+    data = DataLoading(dataset, batch_size=512)
+    train_loader = data()
+    for batch in train_loader:
+        b, target, mask = batch
+        print(b.shape)
+        print(target.shape)
+        print(mask.shape)
+        break
 
