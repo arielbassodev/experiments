@@ -24,15 +24,17 @@ class LinearProjection(nn.Module):
         self.latent_size = latent_size
         self.input_dim = input_dim
         self.linear_projection = nn.Linear(self.input_dim, self.latent_size)
-        self.class_token = nn.Parameter(torch.zeros(1, 1, self.latent_size), requires_grad=True)
+        self.class_token = nn.Parameter(torch.randn(1, 1, self.latent_size), requires_grad=True)
         self.positional_encoding = PositionalEncoding(self.latent_size)
+        self.num_classes = 500
+        self.classifier = nn.Linear(self.latent_size, self.num_classes)
 
     def forward(self, sign_batch, masks):
         sign_batch = self.linear_projection(sign_batch)
         class_token = self.class_token.expand(sign_batch.shape[0], -1, -1)
         sign_batch = torch.cat((class_token, sign_batch), dim=1)
-        class_token_mask = torch.zeros(sign_batch.shape[0], 1)
-        masks = torch.cat((masks, class_token_mask), dim=1)
+        class_token_mask = torch.zeros(sign_batch.shape[0], 1).bool()
+        masks = torch.cat((class_token_mask, masks), dim=1)
         sign_batch = self.positional_encoding(sign_batch)
         return sign_batch, masks
 
@@ -43,19 +45,21 @@ class VitModel(nn.Module):
         self.n_heads = n_heads
         self.input_dim = input_dim
         self.num_blocks = num_blocks
-        self.encoder = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.n_heads)
+        self.encoder = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.n_heads, batch_first=True)
         self.linear_projection = LinearProjection(self.input_dim, self.d_model)
         self.transformer = nn.TransformerEncoder(self.encoder, self.num_blocks)
 
     def forward(self,x, masks):
         x, masks = self.linear_projection(x, masks)
-        x = self.transformer.forward(x, src_key_padding_mask=masks)
-        return x
+        x = self.transformer(x, src_key_padding_mask=masks)
+        cls_token = x[:,0]
+        output = self.classifier(cls_token)
+        return output
 
 if __name__ == '__main__':
-    example_x = torch.randn(512, 50,512)
+    example_x = torch.randn(512, 50,768)
     n_heads, n_layers = 4, 4
-    encoder = VitModel(512, 512, 8, 4)
+    encoder = VitModel(768, 512, 8, 4)
     example_mask = [[False]*500 + [True]*12]*50
     example_mask = torch.tensor(example_mask)
     example_y = encoder(example_x, example_mask)
